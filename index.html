@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>骑行轨迹地图</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- JSZip for KMZ -->
+  <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #f8f9fb;
+      --panel-bg: #ffffff;
+      --primary: #ff6b6b;
+      --primary-light: #ff8787;
+      --accent: #4ecdc4;
+      --text: #2c3e50;
+      --text-light: #95a5a6;
+      --border: #e8eef2;
+      --shadow: 0 4px 16px rgba(0,0,0,0.08);
+      --shadow-sm: 0 2px 8px rgba(0,0,0,0.04);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ─── Header ─── */
+    header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      z-index: 100;
+      box-shadow: var(--shadow-sm);
+    }
+
+    header h1 {
+      font-size: 20px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      letter-spacing: 0.5px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .stats-bar {
+      display: flex;
+      gap: 24px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.9);
+    }
+
+    .stats-bar span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stats-bar b {
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .tile-selector {
+      font-size: 13px;
+      color: rgba(255,255,255,0.9);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+    }
+
+    /* ─── Main layout ─── */
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ─── Sidebar ─── */
+    .sidebar {
+      width: 320px;
+      background: var(--panel-bg);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow: hidden;
+      box-shadow: 2px 0 8px rgba(0,0,0,0.04);
+    }
+
+    /* Time slider section */
+    .time-section {
+      padding: 20px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: linear-gradient(135deg, rgba(102,126,234,0.05) 0%, rgba(118,75,162,0.05) 100%);
+    }
+
+    .time-section h3 {
+      font-size: 11px;
+      color: var(--text-light);
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-weight: 700;
+    }
+
+    .date-display {
+      font-size: 16px;
+      font-weight: 700;
+      color: #667eea;
+      margin-bottom: 12px;
+    }
+
+    .range-wrapper {
+      position: relative;
+      padding: 8px 0;
+    }
+
+    .range-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-light);
+      margin-bottom: 8px;
+    }
+
+    #dateSlider {
+      width: 100%;
+      accent-color: #667eea;
+      cursor: pointer;
+      height: 6px;
+    }
+
+    .btn-reset {
+      margin-top: 12px;
+      width: 100%;
+      padding: 8px 0;
+      background: white;
+      border: 1.5px solid #667eea;
+      border-radius: 8px;
+      color: #667eea;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-reset:hover {
+      background: #667eea;
+      color: white;
+    }
+
+    /* ─── Calendar ─── */
+    .calendar-wrapper {
+      position: relative;
+      margin-bottom: 12px;
+    }
+
+    .calendar-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1.5px solid #667eea;
+      border-radius: 8px;
+      background: white;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .calendar-input:hover {
+      background: #f0f4ff;
+    }
+
+    .calendar-popup {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      margin-top: 8px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 16px;
+      z-index: 1000;
+      display: none;
+    }
+
+    .calendar-popup.show {
+      display: block;
+    }
+
+    .calendar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .calendar-header button {
+      background: none;
+      border: none;
+      color: #667eea;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+
+    .calendar-header button:hover {
+      background: #f0f4ff;
+    }
+
+    .calendar-header h3 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .calendar-weekdays {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+
+    .calendar-weekday {
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-light);
+      padding: 4px 0;
+    }
+
+    .calendar-days {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+    }
+
+    .calendar-day {
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      font-size: 12px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.2s;
+      color: var(--text);
+    }
+
+    .calendar-day:hover {
+      background: #f0f4ff;
+      border-color: #667eea;
+    }
+
+    .calendar-day.other-month {
+      color: var(--text-light);
+      opacity: 0.5;
+    }
+
+    .calendar-day.has-ride {
+      background: linear-gradient(135deg, rgba(102,126,234,0.2) 0%, rgba(118,75,162,0.2) 100%);
+      border-color: #667eea;
+      font-weight: 700;
+      color: #667eea;
+    }
+
+    .calendar-day.selected {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      font-weight: 700;
+    }
+
+    .calendar-day.today {
+      border: 1.5px solid #667eea;
+    }
+
+    /* History list */
+    .history-header {
+      padding: 14px 20px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .history-header h3 {
+      font-size: 11px;
+      color: var(--text-light);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-weight: 700;
+    }
+
+    .btn-clear {
+      font-size: 12px;
+      color: #ff6b6b;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: all 0.2s;
+      font-weight: 600;
+    }
+
+    .btn-clear:hover { background: rgba(255,107,107,0.1); }
+
+    .history-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 12px 12px;
+    }
+
+    .history-list::-webkit-scrollbar { width: 5px; }
+    .history-list::-webkit-scrollbar-track { background: transparent; }
+    .history-list::-webkit-scrollbar-thumb {
+      background: #ddd;
+      border-radius: 3px;
+    }
+    .history-list::-webkit-scrollbar-thumb:hover { background: #bbb; }
+
+    .ride-item {
+      padding: 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-bottom: 6px;
+      transition: all 0.15s;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border: 1.5px solid transparent;
+      background: #f8f9fb;
+    }
+
+    .ride-item:hover {
+      background: #f0f4ff;
+      border-color: #667eea;
+      transform: translateX(2px);
+    }
+
+    .ride-item.selected {
+      background: linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%);
+      border-color: #667eea;
+    }
+
+    .ride-item-info {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      flex: 1;
+    }
+
+    .ride-item-date {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .ride-item-stats {
+      font-size: 12px;
+      color: var(--text-light);
+    }
+
+    .ride-item-del {
+      opacity: 0;
+      background: none;
+      border: none;
+      color: #ff6b6b;
+      cursor: pointer;
+      font-size: 18px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: all 0.15s;
+      line-height: 1;
+      font-weight: 700;
+    }
+
+    .ride-item:hover .ride-item-del { opacity: 1; }
+    .ride-item-del:hover { background: rgba(255,107,107,0.1); }
+
+    .empty-state {
+      text-align: center;
+      padding: 50px 20px;
+      color: var(--text-light);
+      font-size: 14px;
+    }
+
+    .empty-state .icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    /* ─── Map area ─── */
+    .map-area {
+      flex: 1;
+      position: relative;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Upload hint */
+    .upload-hint {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(102, 126, 234, 0.95);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      z-index: 1000;
+      pointer-events: none;
+      transition: opacity 0.3s;
+      box-shadow: var(--shadow);
+    }
+
+    .upload-hint.hidden { opacity: 0; }
+
+    /* Legend */
+    .legend {
+      position: absolute;
+      bottom: 30px;
+      right: 16px;
+      background: white;
+      border-radius: 12px;
+      padding: 16px 18px;
+      box-shadow: var(--shadow);
+      z-index: 1000;
+      font-size: 12px;
+      line-height: 2;
+      min-width: 160px;
+    }
+
+    .legend h4 {
+      font-size: 12px;
+      margin-bottom: 10px;
+      color: var(--text);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 700;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+
+    .legend-line {
+      width: 32px;
+      height: 4px;
+      border-radius: 2px;
+      display: inline-block;
+    }
+
+    /* ─── Upload button ─── */
+    .btn-upload {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      background: white;
+      color: #667eea;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .btn-upload:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .btn-upload:active { transform: translateY(0); }
+
+    #fileInput { display: none; }
+
+    /* ─── Tooltip ─── */
+    .leaflet-popup-content-wrapper {
+      border-radius: 10px;
+      font-family: inherit;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .popup-date {
+      font-size: 14px;
+      font-weight: 700;
+      color: #667eea;
+    }
+
+    .popup-stats {
+      font-size: 12px;
+      color: var(--text-light);
+      margin-top: 4px;
+    }
+
+    /* ─── Polyline styles ─── */
+    .ride-outline {
+      filter: drop-shadow(0 0 2px rgba(255,255,255,0.8));
+    }
+
+    .ride-glow {
+      filter: drop-shadow(0 0 4px currentColor);
+    }
+
+    .ride-main {
+      filter: drop-shadow(0 1px 3px rgba(0,0,0,0.2));
+    }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 600px) {
+      .sidebar { width: 260px; }
+      .stats-bar { display: none; }
+      header { padding: 12px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>
+      <span>🚴</span> 猎日大侠的骑行轨迹地图
+    </h1>
+    <div class="header-actions">
+      <div class="stats-bar" id="statsBar">
+        <span>🏆 <b id="statCount">0</b> 次</span>
+        <span>📏 <b id="statDist">0</b> km</span>
+      </div>
+      <div class="tile-selector">
+        🗺️ OSM Humanitarian
+      </div>
+      <button class="btn-upload" onclick="document.getElementById('fileInput').click()">
+        ➕ 上传轨迹
+      </button>
+      <input type="file" id="fileInput" accept=".gpx,.kml,.kmz" multiple>
+    </div>
+  </header>
+
+  <div class="main">
+    <aside class="sidebar">
+      <div class="time-section">
+        <h3>📅 时间轴</h3>
+        <div class="date-display" id="dateDisplay">全部历史</div>
+        <div class="calendar-wrapper">
+          <button class="calendar-input" id="calendarBtn">📆 选择日期</button>
+          <div class="calendar-popup" id="calendarPopup">
+            <div class="calendar-header">
+              <button id="prevMonth">‹</button>
+              <h3 id="monthYear"></h3>
+              <button id="nextMonth">›</button>
+            </div>
+            <div class="calendar-weekdays">
+              <div class="calendar-weekday">日</div>
+              <div class="calendar-weekday">一</div>
+              <div class="calendar-weekday">二</div>
+              <div class="calendar-weekday">三</div>
+              <div class="calendar-weekday">四</div>
+              <div class="calendar-weekday">五</div>
+              <div class="calendar-weekday">六</div>
+            </div>
+            <div class="calendar-days" id="calendarDays"></div>
+          </div>
+        </div>
+        <button class="btn-reset" id="btnReset">↺ 显示全部</button>
+      </div>
+
+      <div class="history-header">
+        <h3>🚴 骑行历史</h3>
+        <button class="btn-clear" id="btnClearAll">清空</button>
+      </div>
+
+      <div class="history-list" id="historyList">
+        <div class="empty-state" id="emptyState">
+          <div class="icon">🗺️</div>
+          <p>还没有骑行记录<br>点击右上角上传轨迹文件</p>
+        </div>
+      </div>
+    </aside>
+
+    <div class="map-area">
+      <div id="map"></div>
+      <div class="upload-hint hidden" id="uploadHint">
+        正在解析轨迹文件…
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // ─────────────────────────────────────────────────────
+  //  Constants
+  // ─────────────────────────────────────────────────────
+  const DB_NAME = 'RideTrackerDB';
+  const DB_VERSION = 1;
+  const STORE_NAME = 'rides';
+
+  // 彩虹色系 - 多个漂亮的轨迹样式
+  const TRACK_STYLES = [
+    { color: '#ff6b6b', name: '热情红' },      // 红
+    { color: '#ff8c42', name: '活力橙' },      // 橙
+    { color: '#ffa94d', name: '温暖黄' },      // 黄
+    { color: '#6bcf7f', name: '清爽绿' },      // 绿
+    { color: '#4ecdc4', name: '清新青' },      // 青
+    { color: '#667eea', name: '深邃蓝' },      // 蓝
+    { color: '#764ba2', name: '神秘紫' },      // 紫
+    { color: '#f06292', name: '粉红' },        // 粉红
+    { color: '#ab47bc', name: '兰花紫' },      // 兰花紫
+    { color: '#29b6f6', name: '天空蓝' },      // 天空蓝
+  ];
+
+  function getRandomStyle() {
+    return TRACK_STYLES[Math.floor(Math.random() * TRACK_STYLES.length)];
+  }
+
+  // ─────────────────────────────────────────────────────
+  //  State
+  // ─────────────────────────────────────────────────────
+  let db = null;
+  let allRides = [];
+  let displayedRides = [];
+  let mapPolylines = [];
+  let map = null;
+  let cutoffDate = null;
+  let selectedRideId = null;  // 记录当前选中的轨迹
+  let calendarCurrentDate = new Date();  // 日历当前显示的月份
+
+  // ─────────────────────────────────────────────────────
+  //  Tile Layers
+  // ─────────────────────────────────────────────────────
+  const TILE_LAYERS = {
+    OSM_DE: {
+      url: 'https://{s}.tile.openstreetmap.de/tiles/osmde/{z}/{x}/{y}.png',
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 18,
+    },
+  };
+
+  let currentTileLayer = null;
+
+  function switchTileLayer(name) {
+    if (currentTileLayer) map.removeLayer(currentTileLayer);
+    const layer = TILE_LAYERS[name];
+    currentTileLayer = L.tileLayer(layer.url, {
+      attribution: layer.attribution,
+      maxZoom: layer.maxZoom,
+      subdomains: 'abcd',
+    }).addTo(map);
+  }
+
+  // ─────────────────────────────────────────────────────
+  //  IndexedDB
+  // ─────────────────────────────────────────────────────
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => resolve(req.result);
+      req.onupgradeneeded = (e) => {
+        const store = e.target.result.createObjectStore(STORE_NAME, {
+          keyPath: 'id', autoIncrement: true
+        });
+        store.createIndex('date', 'date', { unique: false });
+      };
+    });
+  }
+
+  async function loadRides() {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function saveRide(ride) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.add(ride);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function deleteRide(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function clearAllRides() {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.clear();
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  // ─────────────────────────────────────────────────────
+  //  Geometry helpers
+  // ─────────────────────────────────────────────────────
+  function haversineM(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2 +
+               Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) *
+               Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function totalDistance(points) {
+    let d = 0;
+    for (let i = 1; i < points.length; i++)
+      d += haversineM(points[i-1][0], points[i-1][1], points[i][0], points[i][1]);
+    return d;
+  }
+
+  function segmentize(points) {
+    if (points.length < 2) return [];
+    const segments = [];
+    let segStart = 0;
+    let accum = 0;
+    for (let i = 1; i < points.length; i++) {
+      accum += haversineM(points[i-1][0], points[i-1][1], points[i][0], points[i][1]);
+      if (accum >= 50) {
+        segments.push([points[segStart], points[i]]);
+        segStart = i;
+        accum = 0;
+      }
+    }
+    if (segStart < points.length - 1) {
+      segments.push([points[segStart], points[points.length - 1]]);
+    }
+    return segments;
+  }
+
+  // ─────────────────────────────────────────────────────
+  //  File Parsing
+  // ─────────────────────────────────────────────────────
+  function parseGPX(text) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, 'text/xml');
+    const trackpoints = [];
+
+    doc.querySelectorAll('trkpt').forEach(pt => {
+      const lat = parseFloat(pt.getAttribute('lat'));
+      const lon = parseFloat(pt.getAttribute('lon'));
+      if (!isNaN(lat) && !isNaN(lon)) trackpoints.push([lat, lon]);
+    });
+
+    if (trackpoints.length === 0) {
+      doc.querySelectorAll('rtept').forEach(pt => {
+        const lat = parseFloat(pt.getAttribute('lat'));
+        const lon = parseFloat(pt.getAttribute('lon'));
+        if (!isNaN(lat) && !isNaN(lon)) trackpoints.push([lat, lon]);
+      });
+    }
+
+    if (trackpoints.length === 0) {
+      doc.querySelectorAll('wpt').forEach(pt => {
+        const lat = parseFloat(pt.getAttribute('lat'));
+        const lon = parseFloat(pt.getAttribute('lon'));
+        if (!isNaN(lat) && !isNaN(lon)) trackpoints.push([lat, lon]);
+      });
+    }
+
+    let rideDate = null;
+    const firstTime = doc.querySelector('trkpt time, wpt time');
+    if (firstTime) rideDate = new Date(firstTime.textContent.trim());
+    if (!rideDate) {
+      const timeEls = doc.querySelectorAll('trk time');
+      if (timeEls.length > 0) rideDate = new Date(timeEls[0].textContent.trim());
+    }
+
+    return { points: trackpoints, date: rideDate };
+  }
+
+  function parseKML(text) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, 'text/xml');
+    const trackpoints = [];
+
+    doc.querySelectorAll('coordinates').forEach(coordsEl => {
+      const txt = coordsEl.textContent.trim();
+      const parts = txt.split(/[\s\n]+/);
+      for (const part of parts) {
+        const tokens = part.split(',');
+        if (tokens.length >= 2) {
+          const lon = parseFloat(tokens[0]);
+          const lat = parseFloat(tokens[1]);
+          if (!isNaN(lat) && !isNaN(lon)) trackpoints.push([lat, lon]);
+        }
+      }
+    });
+
+    let rideDate = null;
+    const ts = doc.querySelector('TimeStamp when, when');
+    if (ts) rideDate = new Date(ts.textContent.trim());
+
+    let name = '';
+    const nameEl = doc.querySelector('Document > name');
+    if (nameEl) name = nameEl.textContent.trim();
+
+    return { points: trackpoints, date: rideDate, name };
+  }
+
+  async function parseKMZ(buffer) {
+    const zip = await JSZip.loadAsync(buffer);
+    const kmlFile = Object.values(zip.files).find(f => f.name.endsWith('.kml') || f.name === 'doc.kml');
+    if (!kmlFile) throw new Error('KMZ 中未找到 KML 文件');
+    const text = await kmlFile.async('string');
+    return parseKML(text);
+  }
+
+  // 生成轨迹哈希值，用于去重
+  function hashRide(points) {
+    // 取前5个和后5个点的坐标组成哈希
+    const sample = [];
+    const step = Math.max(1, Math.floor(points.length / 10));
+    for (let i = 0; i < points.length; i += step) {
+      sample.push(points[i][0].toFixed(4) + ',' + points[i][1].toFixed(4));
+    }
+    return sample.join('|');
+  }
+
+  async function parseFile(file) {
+    let result;
+    if (file.name.endsWith('.gpx')) {
+      result = parseGPX(await file.text());
+    } else if (file.name.endsWith('.kml')) {
+      result = parseKML(await file.text());
+    } else if (file.name.endsWith('.kmz')) {
+      result = await parseKMZ(await file.arrayBuffer());
+    } else {
+      throw new Error('不支持的文件格式: ' + file.name);
+    }
+
+    const points = result.points;
+    if (points.length < 2) throw new Error('轨迹点数量不足（需要至少2个点）');
+
+    const hash = hashRide(points);
+
+    // 检查是否已存在相同轨迹
+    const isDuplicate = allRides.some(r => r.hash === hash);
+    if (isDuplicate) {
+      throw new Error('此轨迹已存在（重复上传）');
+    }
+
+    const ride = {
+      name: result.name || file.name.replace(/\.(gpx|kml|kmz)$/i, ''),
+      date: result.date || new Date(),
+      points,
+      distanceM: totalDistance(points),
+      segments: segmentize(points),
+      hash,
+      style: getRandomStyle(), // 为每条轨迹分配随机样式
+    };
+    return ride;
+  }
+
+  // ─────────────────────────────────────────────────────
+  //  Map
+  // ─────────────────────────────────────────────────────
+  function initMap() {
+    map = L.map('map', { zoomControl: true }).setView([32.1163, 118.8928], 13);
+    switchTileLayer('OSM_DE');
+  }
+
+  function renderRides(shouldFitBounds = true) {
+    mapPolylines.forEach(pl => map.removeLayer(pl));
+    mapPolylines = [];
+
+    if (displayedRides.length === 0) {
+      return;
+    }
+
+    const ridesToDraw = cutoffDate
+      ? displayedRides.filter(r => new Date(r.date) <= cutoffDate)
+      : displayedRides;
+
+    // 先绘制所有轨迹
+    const polylinesByRide = new Map();
+
+    for (const ride of ridesToDraw) {
+      const pts = ride.points;
+      if (pts.length < 2) continue;
+      
+      const color = ride.style.color;
+      const ridePolylines = [];
+
+      // 底层：白色描边（6px），增加对比度
+      const outlinePolyline = L.polyline(pts, {
+        color: '#ffffff',
+        weight: 6.5,
+        opacity: 0.95,
+        lineJoin: 'round',
+        lineCap: 'round',
+        className: 'ride-outline',
+      }).addTo(map);
+      ridePolylines.push(outlinePolyline);
+      mapPolylines.push(outlinePolyline);
+
+      // 中层：半透明彩色线（5px），增加发光感
+      const glowPolyline = L.polyline(pts, {
+        color: color,
+        weight: 5,
+        opacity: 0.4,
+        lineJoin: 'round',
+        lineCap: 'round',
+        className: 'ride-glow',
+      }).addTo(map);
+      ridePolylines.push(glowPolyline);
+      mapPolylines.push(glowPolyline);
+
+      // 上层：彩色主线（3px），清晰可见
+      const mainPolyline = L.polyline(pts, {
+        color: color,
+        weight: 3,
+        opacity: 1,
+        lineJoin: 'round',
+        lineCap: 'round',
+        className: 'ride-main',
+      });
+
+      const dateStr = new Date(ride.date).toLocaleString('zh-CN', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+      });
+      const distKm = (ride.distanceM / 1000).toFixed(1);
+      mainPolyline.bindPopup(
+        '<div class="popup-date">' + dateStr + '</div>' +
+        '<div class="popup-stats">' + ride.name + ' · ' + distKm + ' km</div>'
+      );
+
+      mainPolyline.addTo(map);
+      ridePolylines.push(mainPolyline);
+      mapPolylines.push(mainPolyline);
+
+      // 为轨迹添加点击事件
+      outlinePolyline.on('click', () => selectRideFromMap(ride.id));
+      glowPolyline.on('click', () => selectRideFromMap(ride.id));
+      mainPolyline.on('click', () => selectRideFromMap(ride.id));
+
+      polylinesByRide.set(ride.id, ridePolylines);
+    }
+
+    // 如果有选中的轨迹，将其置于顶层
+    if (selectedRideId !== null) {
+      const selectedPolylines = polylinesByRide.get(selectedRideId);
+      if (selectedPolylines) {
+        selectedPolylines.forEach(pl => {
+          map.removeLayer(pl);
+          pl.addTo(map);
+        });
+      }
+    }
+
+    // 只在初始加载时调用 fitBounds
+    if (shouldFitBounds && ridesToDraw.length > 0) {
+      const allPoints = ridesToDraw.flatMap(r => r.points);
+      if (allPoints.length > 0) {
+        const bounds = L.latLngBounds(allPoints);
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────
+  //  UI updates
+  // ─────────────────────────────────────────────────────
+  function formatDate(d) {
+    return new Date(d).toLocaleDateString('zh-CN', {
+      year: 'numeric', month: '2-digit', day: '2-digit'
+    });
+  }
+
+  function updateStats() {
+    const count = allRides.length;
+    const totalDist = allRides.reduce((s, r) => s + r.distanceM, 0) / 1000;
+    document.getElementById('statCount').textContent = count;
+    document.getElementById('statDist').textContent = totalDist.toFixed(1);
+  }
+
+  function updateHistoryList() {
+    const container = document.getElementById('historyList');
+    const empty = document.getElementById('emptyState');
+
+    container.querySelectorAll('.ride-item').forEach(el => el.remove());
+
+    if (allRides.length === 0) {
+      empty.style.display = '';
+      return;
+    }
+
+    empty.style.display = 'none';
+    const sorted = [...allRides].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    for (const ride of sorted) {
+      const item = document.createElement('div');
+      item.className = 'ride-item';
+      item.dataset.id = ride.id;
+
+      const distKm = (ride.distanceM / 1000).toFixed(1);
+      item.innerHTML =
+        '<div class="ride-item-info">' +
+          '<span class="ride-item-date">' + formatDate(ride.date) + '</span>' +
+          '<span class="ride-item-stats">' + ride.name + ' · ' + distKm + ' km</span>' +
+        '</div>' +
+        '<button class="ride-item-del" title="删除此记录">✕</button>';
+
+      item.addEventListener('click', (e) => {
+        if (e.target.classList.contains('ride-item-del')) {
+          e.stopPropagation();
+          removeRide(ride.id);
+          return;
+        }
+        flyToRide(ride);
+      });
+
+      container.appendChild(item);
+    }
+  }
+
+  function updateCalendar() {
+    if (allRides.length === 0) {
+      document.getElementById('dateDisplay').textContent = '暂无数据';
+      return;
+    }
+    renderCalendar();
+  }
+
+  function flyToRide(ride) {
+    if (ride.points.length === 0) return;
+    
+    // 设置选中的轨迹
+    selectedRideId = ride.id;
+
+    document.querySelectorAll('.ride-item').forEach(el => {
+      el.classList.toggle('selected', String(el.dataset.id) === String(ride.id));
+    });
+
+    // 重新渲染，但不改变缩放（shouldFitBounds = false）
+    renderRides(false);
+  }
+
+  function selectRideFromMap(rideId) {
+    // 从地图点击选中轨迹
+    selectedRideId = rideId;
+    
+    // 更新左侧列表的选中状态
+    document.querySelectorAll('.ride-item').forEach(el => {
+      el.classList.toggle('selected', String(el.dataset.id) === String(rideId));
+    });
+
+    // 重新渲染，但不改变缩放（shouldFitBounds = false）
+    renderRides(false);
+  }
+
+  // ─────────────────────────────────────────────────────
+  //  Actions
+  // ─────────────────────────────────────────────────────
+  async function handleFiles(files) {
+    const hint = document.getElementById('uploadHint');
+    hint.classList.remove('hidden');
+
+    let added = 0;
+    for (const file of files) {
+      try {
+        const ride = await parseFile(file);
+        ride.id = await saveRide(ride);
+        allRides.push(ride);
+        added++;
+      } catch (err) {
+        alert('⚠️ 无法解析 ' + file.name + '：' + err.message);
+      }
+    }
+
+    hint.classList.add('hidden');
+
+    if (added > 0) {
+      displayedRides = [...allRides];
+      cutoffDate = null;
+      updateAll();
+    }
+  }
+
+  async function removeRide(id) {
+    await deleteRide(id);
+    allRides = allRides.filter(r => r.id !== id);
+    updateAll();
+  }
+
+  async function handleClearAll() {
+    if (allRides.length === 0) return;
+    if (!confirm('确定要清空所有 ' + allRides.length + ' 条骑行记录吗？此操作不可恢复。')) return;
+    await clearAllRides();
+    allRides = [];
+    displayedRides = [];
+    cutoffDate = null;
+    updateAll();
+  }
+
+  function updateAll() {
+    updateStats();
+    updateHistoryList();
+    updateCalendar();
+    renderRides();
+  }
+
+  // ─────────────────────────────────────────────────────
+  //  Calendar
+  // ─────────────────────────────────────────────────────
+  function getRideDates() {
+    const dates = new Set();
+    allRides.forEach(ride => {
+      const d = new Date(ride.date);
+      dates.add(d.toISOString().split('T')[0]);
+    });
+    return dates;
+  }
+
+  function renderCalendar() {
+    const year = calendarCurrentDate.getFullYear();
+    const month = calendarCurrentDate.getMonth();
+    
+    document.getElementById('monthYear').textContent = 
+      calendarCurrentDate.toLocaleString('zh-CN', { year: 'numeric', month: 'long' });
+
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startDate = new Date(firstDay);
+    startDate.setDate(startDate.getDate() - firstDay.getDay());
+
+    const rideDates = getRideDates();
+    const daysContainer = document.getElementById('calendarDays');
+    daysContainer.innerHTML = '';
+
+    for (let i = 0; i < 42; i++) {
+      const date = new Date(startDate);
+      date.setDate(date.getDate() + i);
+      
+      const dayEl = document.createElement('div');
+      dayEl.className = 'calendar-day';
+      dayEl.textContent = date.getDate();
+
+      const dateStr = date.toISOString().split('T')[0];
+      const isOtherMonth = date.getMonth() !== month;
+      const hasRide = rideDates.has(dateStr);
+      const isToday = dateStr === new Date().toISOString().split('T')[0];
+      const isSelected = cutoffDate && dateStr === cutoffDate.toISOString().split('T')[0];
+
+      if (isOtherMonth) dayEl.classList.add('other-month');
+      if (hasRide) dayEl.classList.add('has-ride');
+      if (isToday) dayEl.classList.add('today');
+      if (isSelected) dayEl.classList.add('selected');
+
+      dayEl.addEventListener('click', () => {
+        cutoffDate = new Date(date);
+        displayedRides = allRides.filter(r => new Date(r.date) <= cutoffDate);
+        document.getElementById('dateDisplay').textContent = '截至 ' + formatDate(cutoffDate);
+        renderCalendar();
+        renderRides(false);
+        document.getElementById('calendarPopup').classList.remove('show');
+      });
+
+      daysContainer.appendChild(dayEl);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────
+  //  Event listeners
+  // ─────────────────────────────────────────────────────
+  document.getElementById('fileInput').addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+      handleFiles(Array.from(e.target.files));
+      e.target.value = '';
+    }
+  });
+
+  // Calendar events
+  document.getElementById('calendarBtn').addEventListener('click', () => {
+    const popup = document.getElementById('calendarPopup');
+    popup.classList.toggle('show');
+    if (popup.classList.contains('show')) {
+      renderCalendar();
+    }
+  });
+
+  document.getElementById('prevMonth').addEventListener('click', () => {
+    calendarCurrentDate.setMonth(calendarCurrentDate.getMonth() - 1);
+    renderCalendar();
+  });
+
+  document.getElementById('nextMonth').addEventListener('click', () => {
+    calendarCurrentDate.setMonth(calendarCurrentDate.getMonth() + 1);
+    renderCalendar();
+  });
+
+  // Close calendar when clicking outside
+  document.addEventListener('click', (e) => {
+    const calendar = document.querySelector('.calendar-wrapper');
+    if (calendar && !calendar.contains(e.target)) {
+      document.getElementById('calendarPopup').classList.remove('show');
+    }
+  });
+
+  document.getElementById('btnReset').addEventListener('click', () => {
+    cutoffDate = null;
+    displayedRides = [...allRides];
+    document.getElementById('dateDisplay').textContent = '全部历史';
+    document.getElementById('calendarPopup').classList.remove('show');
+    renderCalendar();
+    renderRides(false);
+  });
+
+  document.getElementById('btnClearAll').addEventListener('click', handleClearAll);
+
+  // ─────────────────────────────────────────────────────
+  //  Init
+  // ─────────────────────────────────────────────────────
+  async function init() {
+    initMap();
+    db = await openDB();
+    allRides = await loadRides();
+    displayedRides = [...allRides];
+    updateAll();
+  }
+
+  init();
+  </script>
+</body>
+</html>
